@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Image Resizer & Compressor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+      :root {
+        --primary: #4caf50;
+        --secondary: #f5f5f5;
+        --accent: #2196f3;
+        --text: #333;
+        --border: #ddd;
+      }
+
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background-color: #fdfdfd;
+        color: var(--text);
+        padding: 30px;
+        max-width: 1000px;
+        margin: auto;
+      }
+
+      h2 {
+        text-align: center;
+        color: var(--primary);
+        margin-bottom: 30px;
+      }
+
+      .controls {
+        background-color: var(--secondary);
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+        margin-bottom: 25px;
+      }
+
+      .controls label {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 15px;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      .controls input,
+      .controls select {
+        margin-left: 5px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        background-color: #fff;
+        min-width: 70px;
+      }
+
+      .controls button {
+        padding: 10px 20px;
+        border: none;
+        background-color: var(--primary);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-top: 10px;
+        margin-right: 10px;
+        font-weight: 600;
+        transition: background 0.2s ease;
+      }
+
+      .controls button:hover {
+        background-color: #45a049;
+      }
+
+      .drop-zone {
+        border: 2px dashed var(--border);
+        padding: 30px;
+        text-align: center;
+        background-color: #fafafa;
+        border-radius: 10px;
+        font-size: 16px;
+        color: #888;
+        margin-bottom: 25px;
+        transition: background 0.3s ease;
+      }
+
+      .drop-zone.dragover {
+        background-color: #e0f7fa;
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .image-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 20px;
+      }
+
+      .image-box {
+        background-color: white;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .image-box img {
+        max-width: 100%;
+        max-height: 130px;
+        border-radius: 6px;
+        margin-bottom: 8px;
+      }
+
+      .image-box div {
+        font-size: 13px;
+        margin-bottom: 5px;
+        color: #555;
+      }
+
+      .image-box a {
+        display: inline-block;
+        margin-top: 5px;
+        text-decoration: none;
+        color: var(--accent);
+        font-weight: 500;
+        font-size: 13px;
+      }
+
+      .image-box a:hover {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 600px) {
+        .controls label {
+          display: block;
+        }
+        .controls input,
+        .controls select {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🖼️ Advanced Image Resizer & Compressor</h2>
+
+    <div class="controls">
+      <label>
+        Resize Mode:
+        <select id="resizeMode">
+          <option value="pixels">By Pixels</option>
+          <option value="percent">By Percentage</option>
+        </select>
+      </label>
+      <label id="pixelInputs">
+        Width: <input type="number" id="width" value="512" /> Height:
+        <input type="number" id="height" value="384" />
+      </label>
+      <label id="percentInputs" style="display: none">
+        Scale (%): <input type="number" id="scale" value="50" />
+      </label>
+      <label>
+        Quality (0.1 - 1):
+        <input
+          type="number"
+          id="quality"
+          value="0.8"
+          step="0.1"
+          min="0.1"
+          max="1"
+        />
+      </label>
+      <label>
+        Format:
+        <select id="format">
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/png">PNG</option>
+          <option value="image/webp">WebP</option>
+        </select>
+      </label>
+      <label>
+        ZIP Name: <input type="text" id="zipName" value="resized_images" />
+      </label>
+      <br />
+      <input type="file" id="fileInput" multiple accept="image/*" />
+      <button onclick="processImages()">Resize & Compress</button>
+      <button onclick="downloadAll()">Download ZIP</button>
+    </div>
+
+    <div class="drop-zone" id="dropZone">Drag & Drop Images Here</div>
+
+    <div class="image-container" id="output"></div>
+
+    <script>
+      let processedImages = [];
+
+      document.getElementById("resizeMode").addEventListener("change", () => {
+        const mode = document.getElementById("resizeMode").value;
+        document.getElementById("pixelInputs").style.display =
+          mode === "pixels" ? "inline" : "none";
+        document.getElementById("percentInputs").style.display =
+          mode === "percent" ? "inline" : "none";
+      });
+
+      const dropZone = document.getElementById("dropZone");
+      dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+      });
+      dropZone.addEventListener("dragleave", () =>
+        dropZone.classList.remove("dragover")
+      );
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        document.getElementById("fileInput").files = e.dataTransfer.files;
+      });
+
+      function processImages() {
+        const files = document.getElementById("fileInput").files;
+        const resizeMode = document.getElementById("resizeMode").value;
+        const maxWidth = parseInt(document.getElementById("width").value);
+        const maxHeight = parseInt(document.getElementById("height").value);
+        const scale = parseInt(document.getElementById("scale").value);
+        const quality = parseFloat(document.getElementById("quality").value);
+        const format = document.getElementById("format").value;
+
+        const output = document.getElementById("output");
+        output.innerHTML = "";
+        processedImages = [];
+
+        if (!files.length) return;
+
+        Array.from(files).forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            const img = new Image();
+            img.src = e.target.result;
+
+            img.onload = function () {
+              const canvas = document.createElement("canvas");
+              let [w, h] = [img.width, img.height];
+
+              if (resizeMode === "pixels") {
+                const ratio = Math.min(maxWidth / w, maxHeight / h);
+                w = w * ratio;
+                h = h * ratio;
+              } else if (resizeMode === "percent") {
+                const factor = scale / 100;
+                w = w * factor;
+                h = h * factor;
+              }
+
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, w, h);
+
+              canvas.toBlob(
+                (blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const ext = format.split("/")[1];
+                  const name = file.name.replace(/\.[^/.]+$/, "") + `.${ext}`;
+
+                  processedImages.push({ blob, name });
+
+                  const div = document.createElement("div");
+                  div.className = "image-box";
+
+                  const sizeKB = (blob.size / 1024).toFixed(1);
+                  div.innerHTML = `
+                <img src="${url}" alt="resized">
+                <div>${name}</div>
+                <div>${sizeKB} KB</div>
+                <a href="${url}" download="${name}">Download</a>
+              `;
+                  output.appendChild(div);
+                },
+                format,
+                quality
+              );
+            };
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function downloadAll() {
+        const zip = new JSZip();
+        const folderName =
+          document.getElementById("zipName").value.trim() || "resized_images";
+        const folder = zip.folder(folderName);
+
+        let completed = 0;
+        processedImages.forEach((img, idx) => {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            folder.file(img.name, e.target.result.split(",")[1], {
+              base64: true,
+            });
+            completed++;
+            if (completed === processedImages.length) {
+              zip.generateAsync({ type: "blob" }).then((blob) => {
+                saveAs(blob, folderName + ".zip");
+              });
+            }
+          };
+          reader.readAsDataURL(img.blob);
+        });
+      }
+    </script>
+  </body>
+</html>
